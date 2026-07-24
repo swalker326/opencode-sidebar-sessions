@@ -2,7 +2,7 @@
 
 Browse and switch OpenCode sessions without leaving the sidebar.
 
-![OpenCode sidebar with date-grouped session navigation](./screenshot.png)
+![OpenCode sidebar with date-grouped session navigation](https://github.com/user-attachments/assets/fa9931f5-1d2e-4202-a0a0-dcda39976327)
 
 ## Install
 
