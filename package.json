@@ -21,8 +21,7 @@
     "session-sidebar"
   ],
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "exports": {
     "./tui": {
