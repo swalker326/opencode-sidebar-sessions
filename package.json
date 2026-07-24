@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "opencode-sidebar-sessions",
+  "version": "0.1.0",
+  "description": "Clickable, keyboard-driven session navigation for the OpenCode TUI sidebar.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Shane Walker",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/swalker326/opencode-sidebar-sessions.git"
+  },
+  "bugs": {
+    "url": "https://github.com/swalker326/opencode-sidebar-sessions/issues"
+  },
+  "homepage": "https://github.com/swalker326/opencode-sidebar-sessions#readme",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "opencode-tui-plugin",
+    "session-sidebar"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "exports": {
+    "./tui": {
+      "import": "./dist/tui.js",
+      "default": "./dist/tui.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "check": "bun run typecheck && bun run test && bun run build",
+    "prepack": "bun run check",
+    "test": "bun test --conditions=browser",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "opencode": ">=1.18.4"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.18.4",
+    "@opentui/core": ">=0.4.5",
+    "@opentui/keymap": ">=0.4.5",
+    "@opentui/solid": ">=0.4.5",
+    "solid-js": ">=1.9.10"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.18.4",
+    "@opentui/core": "0.4.5",
+    "@opentui/keymap": "0.4.5",
+    "@opentui/solid": "0.4.5",
+    "@types/bun": "latest",
+    "solid-js": "1.9.12",
+    "typescript": "^5.9.3"
+  }
+}

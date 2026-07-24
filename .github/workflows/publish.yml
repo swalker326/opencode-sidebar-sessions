@@ -1,0 +1,62 @@
+name: CI and publish
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+
+  publish:
+    if: >-
+      github.event_name != 'pull_request' &&
+      vars.NPM_TRUSTED_PUBLISHING == 'true'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm install --global npm@latest
+      - run: bun install --frozen-lockfile
+      - id: package
+        name: Check package version
+        shell: bash
+        run: |
+          name=$(node --print "require('./package.json').name")
+          version=$(node --print "require('./package.json').version")
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "$name@$version is already published"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "$name@$version will be published"
+          fi
+      - if: steps.package.outputs.publish == 'true'
+        run: npm publish
