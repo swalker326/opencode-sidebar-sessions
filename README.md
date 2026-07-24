@@ -2,6 +2,8 @@
 
 A TUI plugin that adds clickable session navigation to OpenCode's existing sidebar.
 
+![OpenCode sidebar with date-grouped session navigation](./screenshot.png)
+
 ## Install
 
 Install globally with OpenCode:

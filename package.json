@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@swalker326/opencode-sidebar-sessions",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Clickable, keyboard-driven session navigation for the OpenCode TUI sidebar.",
   "type": "module",
   "license": "MIT",
@@ -31,6 +31,7 @@
   },
   "files": [
     "dist",
+    "screenshot.png",
     "README.md",
     "LICENSE"
   ],
