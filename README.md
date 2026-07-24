@@ -7,7 +7,7 @@ A TUI plugin that adds clickable session navigation to OpenCode's existing sideb
 Install globally with OpenCode:
 
 ```bash
-opencode plugin opencode-sidebar-sessions --global
+opencode plugin @swalker326/opencode-sidebar-sessions --global
 ```
 
 OpenCode installs the package from npm, adds it to `~/.config/opencode/tui.json`, and loads its `./tui` export. Restart OpenCode if the plugin is not activated immediately.
@@ -17,7 +17,7 @@ You can also configure the published package manually:
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["opencode-sidebar-sessions"]
+  "plugin": ["@swalker326/opencode-sidebar-sessions"]
 }
 ```
 
@@ -93,4 +93,4 @@ gh variable set NPM_TRUSTED_PUBLISHING --body true
 gh workflow run publish.yml
 ```
 
-After that, pushing a new version in `package.json` to `main` publishes it automatically with GitHub OIDC and npm provenance. Pushes that do not change the version run CI and skip publishing. Verify releases with `npm view opencode-sidebar-sessions@latest version`.
+After that, pushing a new version in `package.json` to `main` publishes it automatically with GitHub OIDC and npm provenance. Pushes that do not change the version run CI and skip publishing. Verify releases with `npm view @swalker326/opencode-sidebar-sessions@latest version`.
