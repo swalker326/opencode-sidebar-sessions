@@ -22,8 +22,6 @@ Restart OpenCode after installation.
 | `a` | Archive after confirmation |
 | `esc` | Return to the prompt |
 
-You can also click the **Sessions** heading to focus the list or click any session to open it.
-
 ## Highlights
 
 - Groups sessions by recent activity day.
