@@ -13,6 +13,12 @@ type ConfirmProps = {
   onConfirm?: () => void | Promise<void>
   onCancel?: () => void
 }
+type PromptProps = {
+  title: string
+  value?: string
+  onConfirm?: (value: string) => void | Promise<void>
+  onCancel?: () => void
+}
 
 const color = RGBA.fromHex("#ffffff")
 const theme = {
@@ -41,15 +47,24 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
   const handlers = new Map<string, (event: unknown) => void>()
   const layers: KeymapLayer[] = []
   const gathered: string[][] = []
-  const update = mock(async (input: { sessionID: string; time: { archived: number } }) => {
-    const session = sessions.find((item) => item.id === input.sessionID)
-    return { data: session ? { ...session, time: { ...session.time, archived: input.time.archived } } : undefined }
+  const update = mock(async (input: { sessionID: string; title?: string; time?: { archived: number } }) => {
+    const index = sessions.findIndex((item) => item.id === input.sessionID)
+    const session = sessions[index]
+    if (!session) return { data: undefined }
+    const updated =
+      input.title !== undefined
+        ? { ...session, title: input.title }
+        : { ...session, time: { ...session.time, archived: input.time?.archived } }
+    sessions[index] = updated
+    return { data: updated }
   })
   const replaceDialog = mock((render: () => JSX.Element) => {
     render()
   })
   const toast = mock(() => {})
+  const clearDialog = mock(() => {})
   let confirmation: ConfirmProps | undefined
+  let prompt: PromptProps | undefined
   let slotOrder: number | undefined
   let renderTitle: (() => JSX.Element) | undefined
   let renderSidebar: (() => JSX.Element) | undefined
@@ -68,13 +83,17 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
     confirmation = props
     return null
   }
+  const DialogPrompt = (props: PromptProps) => {
+    prompt = props
+    return null
+  }
 
   const api = {
     theme: { current: theme },
     client: { session: { list: async () => ({ data: sessions }), update } },
     lifecycle: { signal: new AbortController().signal, onDispose: () => () => {} },
     route: { current: route, navigate },
-    ui: { Prompt, Slot, DialogConfirm, dialog: { replace: replaceDialog }, toast },
+    ui: { Prompt, Slot, DialogConfirm, DialogPrompt, dialog: { replace: replaceDialog, clear: clearDialog }, toast },
     keys: { formatSequence: () => "ctrl+x f" },
     tuiConfig: {
       keybinds: {
@@ -156,14 +175,18 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
     const titleLine = initial.split("\n").find((line) => line.includes("GitHub work by Shane"))
     expect(titleLine).toContain("...")
     expect(titleLine).not.toContain("swalker326")
-    expect(initial).toContain("↑↓ move")
-    expect(initial).toContain("↵ open")
-    expect(initial).toContain("a archive")
+    expect(initial).toContain("move ↑↓")
+    expect(initial).toContain("open ↵")
+    expect(initial).toContain("rename ctrl+r")
+    expect(initial).toContain("archive a")
     expect(initial).toContain("esc")
-    expect(initial.indexOf("↑↓ move")).toBeGreaterThan(initial.indexOf("> Session 13"))
+    const sessionsLine = initial.split("\n").find((line) => line.includes("Sessions"))
+    expect(sessionsLine).toContain("move ↑↓")
+    expect(sessionsLine).toContain("open ↵")
+    expect(initial).toContain("back esc")
+    expect(initial.indexOf("rename ctrl+r")).toBeGreaterThan(initial.indexOf("> Session 13"))
     expect(initial).not.toContain("Prompt")
     expect(initial).toContain("Sessions")
-    expect(initial.split("\n").find((line) => line.includes("Sessions"))?.trim()).toBe("Sessions")
     expect(initial).not.toContain("Session 1 ")
 
     expect(gathered).toEqual([
@@ -188,15 +211,36 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
 
     expect((navigationLayer?.enabled as () => boolean)()).toBe(true)
     expect(navigationLayer?.bindings).toContainEqual({
+      key: "ctrl+r",
+      cmd: "session.sidebar.rename",
+      desc: "Rename selected session",
+    })
+    expect(navigationLayer?.bindings).toContainEqual({
       key: "a",
       cmd: "session.sidebar.archive",
       desc: "Archive selected session",
     })
+    const rename = navigationLayer?.commands?.find((command) => command.name === "session.sidebar.rename")
+    rename?.run({} as never)
+    expect(replaceDialog).toHaveBeenCalledTimes(1)
+    expect(prompt?.title).toBe("Rename Session")
+    expect(prompt?.value).toBe("Session 13")
+    expect(update).not.toHaveBeenCalled()
+    await prompt?.onConfirm?.("Renamed session")
+    expect(clearDialog).toHaveBeenCalledTimes(1)
+    expect(update).toHaveBeenCalledWith({
+      sessionID: "session-13",
+      title: "Renamed session",
+    })
+    rename?.run({} as never)
+    expect(prompt?.value).toBe("Renamed session")
+    update.mockClear()
+
     const archive = navigationLayer?.commands?.find((command) => command.name === "session.sidebar.archive")
     archive?.run({} as never)
-    expect(replaceDialog).toHaveBeenCalledTimes(1)
+    expect(replaceDialog).toHaveBeenCalledTimes(3)
     expect(confirmation?.title).toBe("Archive session")
-    expect(confirmation?.message).toBe('Archive session "Session 13"?')
+    expect(confirmation?.message).toBe('Archive session "Renamed session"?')
     expect(update).not.toHaveBeenCalled()
     await confirmation?.onConfirm?.()
     expect(update).toHaveBeenCalledWith({
