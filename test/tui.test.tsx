@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, mock, test } from "bun:test"
-import { RGBA } from "@opentui/core"
+import { InputRenderable, RGBA } from "@opentui/core"
 import { testRender, type JSX } from "@opentui/solid"
 import type { TuiPluginApi, TuiPluginMeta, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
 import { Show } from "solid-js"
@@ -13,13 +13,6 @@ type ConfirmProps = {
   onConfirm?: () => void | Promise<void>
   onCancel?: () => void
 }
-type PromptProps = {
-  title: string
-  value?: string
-  onConfirm?: (value: string) => void | Promise<void>
-  onCancel?: () => void
-}
-
 const color = RGBA.fromHex("#ffffff")
 const theme = {
   primary: color,
@@ -58,13 +51,13 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
     sessions[index] = updated
     return { data: updated }
   })
+  let dialogFactory: (() => JSX.Element) | undefined
   const replaceDialog = mock((render: () => JSX.Element) => {
-    render()
+    dialogFactory = render
   })
   const toast = mock(() => {})
   const clearDialog = mock(() => {})
   let confirmation: ConfirmProps | undefined
-  let prompt: PromptProps | undefined
   let slotOrder: number | undefined
   let renderTitle: (() => JSX.Element) | undefined
   let renderSidebar: (() => JSX.Element) | undefined
@@ -83,17 +76,18 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
     confirmation = props
     return null
   }
-  const DialogPrompt = (props: PromptProps) => {
-    prompt = props
-    return null
-  }
-
   const api = {
     theme: { current: theme },
     client: { session: { list: async () => ({ data: sessions }), update } },
     lifecycle: { signal: new AbortController().signal, onDispose: () => () => {} },
     route: { current: route, navigate },
-    ui: { Prompt, Slot, DialogConfirm, DialogPrompt, dialog: { replace: replaceDialog, clear: clearDialog }, toast },
+    ui: {
+      Prompt,
+      Slot,
+      DialogConfirm,
+      dialog: { replace: replaceDialog, clear: clearDialog, setSize: () => {} },
+      toast,
+    },
     keys: { formatSequence: () => "ctrl+x f" },
     tuiConfig: {
       keybinds: {
@@ -223,22 +217,39 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
     const rename = navigationLayer?.commands?.find((command) => command.name === "session.sidebar.rename")
     rename?.run({} as never)
     expect(replaceDialog).toHaveBeenCalledTimes(1)
-    expect(prompt?.title).toBe("Rename Session")
-    expect(prompt?.value).toBe("Session 13")
-    expect(update).not.toHaveBeenCalled()
-    await prompt?.onConfirm?.("Renamed session")
-    expect(clearDialog).toHaveBeenCalledTimes(1)
+    const renameApp = await testRender(() => dialogFactory?.(), { width: 60, height: 8 })
+    try {
+      const renameDialog = await renameApp.waitForFrame((frame) => frame.includes("Rename Session"))
+      expect(renameDialog).toMatch(/Cancel\s+Rename/)
+      const renameInput = renameApp.renderer.root.findDescendantById("opencode-sidebar-sessions:rename-input")
+      expect(renameInput).toBeInstanceOf(InputRenderable)
+      expect((renameInput as InputRenderable).value).toBe("Session 13")
+      expect(update).not.toHaveBeenCalled()
+      ;(renameInput as InputRenderable).value = "Renamed session"
+      ;(renameInput as InputRenderable).submit()
+      await renameApp.waitFor(() => update.mock.calls.length === 1)
+      expect(clearDialog).toHaveBeenCalledTimes(1)
+    } finally {
+      renameApp.renderer.destroy()
+    }
     expect(update).toHaveBeenCalledWith({
       sessionID: "session-13",
       title: "Renamed session",
     })
     rename?.run({} as never)
-    expect(prompt?.value).toBe("Renamed session")
+    const updatedRenameApp = await testRender(() => dialogFactory?.(), { width: 60, height: 8 })
+    try {
+      const updatedInput = updatedRenameApp.renderer.root.findDescendantById("opencode-sidebar-sessions:rename-input")
+      expect((updatedInput as InputRenderable).value).toBe("Renamed session")
+    } finally {
+      updatedRenameApp.renderer.destroy()
+    }
     update.mockClear()
 
     const archive = navigationLayer?.commands?.find((command) => command.name === "session.sidebar.archive")
     archive?.run({} as never)
     expect(replaceDialog).toHaveBeenCalledTimes(3)
+    dialogFactory?.()
     expect(confirmation?.title).toBe("Archive session")
     expect(confirmation?.message).toBe('Archive session "Renamed session"?')
     expect(update).not.toHaveBeenCalled()

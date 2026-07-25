@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
+import { TextAttributes, type InputRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { formatSessionTime, groupSessions, sortRootSessions, truncateTitle, type SessionItem } from "./sessions"
 
@@ -10,6 +10,71 @@ const SESSION_PANE_HEIGHT = 12
 const SIDEBAR_TITLE_WIDTH = 35
 
 type LoadState = "idle" | "loading" | "ready" | "error"
+
+function RenameSessionDialog(props: {
+  api: TuiPluginApi
+  value: string
+  onConfirm: (value: string) => void | Promise<void>
+}) {
+  const theme = () => props.api.theme.current
+  let input: InputRenderable | undefined
+
+  const confirm = (value = input?.value ?? props.value) => {
+    props.api.ui.dialog.clear()
+    return props.onConfirm(value)
+  }
+
+  onMount(() => {
+    props.api.ui.dialog.setSize("medium")
+    const timer = setTimeout(() => {
+      if (!input || input.isDestroyed) return
+      input.focus()
+      input.gotoLineEnd()
+    }, 1)
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD} fg={theme().text}>
+          Rename Session
+        </text>
+        <text fg={theme().textMuted} onMouseUp={() => props.api.ui.dialog.clear()}>
+          esc
+        </text>
+      </box>
+      <box paddingBottom={1}>
+        <input
+          id={`${PLUGIN_ID}:rename-input`}
+          ref={(value: InputRenderable) => {
+            input = value
+          }}
+          value={props.value}
+          placeholder="Session title"
+          placeholderColor={theme().textMuted}
+          textColor={theme().text}
+          focusedTextColor={theme().text}
+          cursorColor={theme().text}
+          on:enter={(value: string) => confirm(value)}
+        />
+      </box>
+      <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
+        <box paddingLeft={1} paddingRight={1} onMouseUp={() => props.api.ui.dialog.clear()}>
+          <text fg={theme().textMuted}>Cancel</text>
+        </box>
+        <box
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={theme().primary}
+          onMouseUp={() => confirm()}
+        >
+          <text fg={theme().selectedListItemText}>Rename</text>
+        </box>
+      </box>
+    </box>
+  )
+}
 
 function SessionList(props: {
   api: TuiPluginApi
@@ -283,16 +348,11 @@ const tui: TuiPlugin = async (api) => {
   const promptRename = () => {
     const session = ordered().find((item) => item.id === selectedSessionID())
     if (!session) return
-    const DialogPrompt = api.ui.DialogPrompt
     api.ui.dialog.replace(() => (
-      <DialogPrompt
-        title="Rename Session"
+      <RenameSessionDialog
+        api={api}
         value={session.title}
-        onConfirm={(title) => {
-          api.ui.dialog.clear()
-          return rename(session, title)
-        }}
-        onCancel={() => api.ui.dialog.clear()}
+        onConfirm={(title) => rename(session, title)}
       />
     ))
   }
