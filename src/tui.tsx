@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
+import { TextAttributes, type InputRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { formatSessionTime, groupSessions, sortRootSessions, truncateTitle, type SessionItem } from "./sessions"
 
@@ -10,6 +10,71 @@ const SESSION_PANE_HEIGHT = 12
 const SIDEBAR_TITLE_WIDTH = 35
 
 type LoadState = "idle" | "loading" | "ready" | "error"
+
+function RenameSessionDialog(props: {
+  api: TuiPluginApi
+  value: string
+  onConfirm: (value: string) => void | Promise<void>
+}) {
+  const theme = () => props.api.theme.current
+  let input: InputRenderable | undefined
+
+  const confirm = (value = input?.value ?? props.value) => {
+    props.api.ui.dialog.clear()
+    return props.onConfirm(value)
+  }
+
+  onMount(() => {
+    props.api.ui.dialog.setSize("medium")
+    const timer = setTimeout(() => {
+      if (!input || input.isDestroyed) return
+      input.focus()
+      input.gotoLineEnd()
+    }, 1)
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD} fg={theme().text}>
+          Rename Session
+        </text>
+        <text fg={theme().textMuted} onMouseUp={() => props.api.ui.dialog.clear()}>
+          esc
+        </text>
+      </box>
+      <box paddingBottom={1}>
+        <input
+          id={`${PLUGIN_ID}:rename-input`}
+          ref={(value: InputRenderable) => {
+            input = value
+          }}
+          value={props.value}
+          placeholder="Session title"
+          placeholderColor={theme().textMuted}
+          textColor={theme().text}
+          focusedTextColor={theme().text}
+          cursorColor={theme().text}
+          on:enter={(value: string) => confirm(value)}
+        />
+      </box>
+      <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
+        <box paddingLeft={1} paddingRight={1} onMouseUp={() => props.api.ui.dialog.clear()}>
+          <text fg={theme().textMuted}>Cancel</text>
+        </box>
+        <box
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={theme().primary}
+          onMouseUp={() => confirm()}
+        >
+          <text fg={theme().selectedListItemText}>Rename</text>
+        </box>
+      </box>
+    </box>
+  )
+}
 
 function SessionList(props: {
   api: TuiPluginApi
@@ -60,10 +125,20 @@ function SessionList(props: {
 
   return (
     <box flexDirection="column" gap={1}>
-      <box onMouseUp={props.focus}>
+      <box width="100%" flexDirection="row" justifyContent="space-between" onMouseUp={props.focus}>
         <text fg={theme().text}>
           <b>Sessions</b>
         </text>
+        <Show when={props.focused()}>
+          <box flexDirection="row" gap={2}>
+            <text fg={theme().text} wrapMode="none">
+              <b>move</b> <span style={{ fg: theme().textMuted }}>↑↓</span>
+            </text>
+            <text fg={theme().text} wrapMode="none">
+              <b>open</b> <span style={{ fg: theme().textMuted }}>↵</span>
+            </text>
+          </box>
+        </Show>
       </box>
 
       <Show when={props.state() !== "loading" || props.sessions().length > 0} fallback={<text fg={theme().textMuted}>Loading...</text>}>
@@ -146,17 +221,14 @@ function SessionList(props: {
         }
       >
         <box width="100%" flexDirection="row" justifyContent="space-between">
-          <text fg={theme().textMuted} wrapMode="none">
-            <span style={{ fg: theme().text }}>↑↓</span> move
+          <text fg={theme().text} wrapMode="none">
+            <b>rename</b> <span style={{ fg: theme().textMuted }}>ctrl+r</span>
           </text>
-          <text fg={theme().textMuted} wrapMode="none">
-            <span style={{ fg: theme().text }}>↵</span> open
+          <text fg={theme().text} wrapMode="none">
+            <b>archive</b> <span style={{ fg: theme().textMuted }}>a</span>
           </text>
-          <text fg={theme().textMuted} wrapMode="none">
-            <span style={{ fg: theme().text }}>a</span> archive
-          </text>
-          <text fg={theme().textMuted} wrapMode="none">
-            <span style={{ fg: theme().text }}>esc</span>
+          <text fg={theme().text} wrapMode="none">
+            <b>back</b> <span style={{ fg: theme().textMuted }}>esc</span>
           </text>
         </box>
       </Show>
@@ -256,6 +328,35 @@ const tui: TuiPlugin = async (api) => {
     api.route.navigate("session", { sessionID })
   }
 
+  const rename = async (session: SessionItem, title: string) => {
+    try {
+      const response = await api.client.session.update({
+        sessionID: session.id,
+        title,
+      })
+      if (response.error) throw new Error(String(response.error))
+      upsert(response.data ?? { ...session, title })
+    } catch (error) {
+      api.ui.toast({
+        variant: "error",
+        title: "Failed to rename session",
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  const promptRename = () => {
+    const session = ordered().find((item) => item.id === selectedSessionID())
+    if (!session) return
+    api.ui.dialog.replace(() => (
+      <RenameSessionDialog
+        api={api}
+        value={session.title}
+        onConfirm={(title) => rename(session, title)}
+      />
+    ))
+  }
+
   const archive = async (session: SessionItem) => {
     const archived = Date.now()
     try {
@@ -328,6 +429,13 @@ const tui: TuiPlugin = async (api) => {
         },
       },
       {
+        name: "session.sidebar.rename",
+        title: "Rename selected session",
+        category: "Session",
+        enabled: () => selectedSessionID() !== undefined,
+        run: promptRename,
+      },
+      {
         name: "session.sidebar.archive",
         title: "Archive selected session",
         category: "Session",
@@ -345,6 +453,7 @@ const tui: TuiPlugin = async (api) => {
         "dialog.select.end",
         "dialog.select.submit",
       ]),
+      { key: "ctrl+r", cmd: "session.sidebar.rename", desc: "Rename selected session" },
       { key: "a", cmd: "session.sidebar.archive", desc: "Archive selected session" },
       { key: "escape", cmd: leaveSidebar, desc: "Leave session sidebar" },
       { key: "ctrl+c", cmd: leaveSidebar, desc: "Leave session sidebar" },

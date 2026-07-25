@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, mock, test } from "bun:test"
-import { RGBA } from "@opentui/core"
+import { InputRenderable, RGBA } from "@opentui/core"
 import { testRender, type JSX } from "@opentui/solid"
 import type { TuiPluginApi, TuiPluginMeta, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
 import { Show } from "solid-js"
@@ -13,7 +13,6 @@ type ConfirmProps = {
   onConfirm?: () => void | Promise<void>
   onCancel?: () => void
 }
-
 const color = RGBA.fromHex("#ffffff")
 const theme = {
   primary: color,
@@ -41,14 +40,23 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
   const handlers = new Map<string, (event: unknown) => void>()
   const layers: KeymapLayer[] = []
   const gathered: string[][] = []
-  const update = mock(async (input: { sessionID: string; time: { archived: number } }) => {
-    const session = sessions.find((item) => item.id === input.sessionID)
-    return { data: session ? { ...session, time: { ...session.time, archived: input.time.archived } } : undefined }
+  const update = mock(async (input: { sessionID: string; title?: string; time?: { archived: number } }) => {
+    const index = sessions.findIndex((item) => item.id === input.sessionID)
+    const session = sessions[index]
+    if (!session) return { data: undefined }
+    const updated =
+      input.title !== undefined
+        ? { ...session, title: input.title }
+        : { ...session, time: { ...session.time, archived: input.time?.archived } }
+    sessions[index] = updated
+    return { data: updated }
   })
+  let dialogFactory: (() => JSX.Element) | undefined
   const replaceDialog = mock((render: () => JSX.Element) => {
-    render()
+    dialogFactory = render
   })
   const toast = mock(() => {})
+  const clearDialog = mock(() => {})
   let confirmation: ConfirmProps | undefined
   let slotOrder: number | undefined
   let renderTitle: (() => JSX.Element) | undefined
@@ -68,13 +76,18 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
     confirmation = props
     return null
   }
-
   const api = {
     theme: { current: theme },
     client: { session: { list: async () => ({ data: sessions }), update } },
     lifecycle: { signal: new AbortController().signal, onDispose: () => () => {} },
     route: { current: route, navigate },
-    ui: { Prompt, Slot, DialogConfirm, dialog: { replace: replaceDialog }, toast },
+    ui: {
+      Prompt,
+      Slot,
+      DialogConfirm,
+      dialog: { replace: replaceDialog, clear: clearDialog, setSize: () => {} },
+      toast,
+    },
     keys: { formatSequence: () => "ctrl+x f" },
     tuiConfig: {
       keybinds: {
@@ -156,14 +169,18 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
     const titleLine = initial.split("\n").find((line) => line.includes("GitHub work by Shane"))
     expect(titleLine).toContain("...")
     expect(titleLine).not.toContain("swalker326")
-    expect(initial).toContain("↑↓ move")
-    expect(initial).toContain("↵ open")
-    expect(initial).toContain("a archive")
+    expect(initial).toContain("move ↑↓")
+    expect(initial).toContain("open ↵")
+    expect(initial).toContain("rename ctrl+r")
+    expect(initial).toContain("archive a")
     expect(initial).toContain("esc")
-    expect(initial.indexOf("↑↓ move")).toBeGreaterThan(initial.indexOf("> Session 13"))
+    const sessionsLine = initial.split("\n").find((line) => line.includes("Sessions"))
+    expect(sessionsLine).toContain("move ↑↓")
+    expect(sessionsLine).toContain("open ↵")
+    expect(initial).toContain("back esc")
+    expect(initial.indexOf("rename ctrl+r")).toBeGreaterThan(initial.indexOf("> Session 13"))
     expect(initial).not.toContain("Prompt")
     expect(initial).toContain("Sessions")
-    expect(initial.split("\n").find((line) => line.includes("Sessions"))?.trim()).toBe("Sessions")
     expect(initial).not.toContain("Session 1 ")
 
     expect(gathered).toEqual([
@@ -188,15 +205,53 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
 
     expect((navigationLayer?.enabled as () => boolean)()).toBe(true)
     expect(navigationLayer?.bindings).toContainEqual({
+      key: "ctrl+r",
+      cmd: "session.sidebar.rename",
+      desc: "Rename selected session",
+    })
+    expect(navigationLayer?.bindings).toContainEqual({
       key: "a",
       cmd: "session.sidebar.archive",
       desc: "Archive selected session",
     })
+    const rename = navigationLayer?.commands?.find((command) => command.name === "session.sidebar.rename")
+    rename?.run({} as never)
+    expect(replaceDialog).toHaveBeenCalledTimes(1)
+    const renameApp = await testRender(() => dialogFactory?.(), { width: 60, height: 8 })
+    try {
+      const renameDialog = await renameApp.waitForFrame((frame) => frame.includes("Rename Session"))
+      expect(renameDialog).toMatch(/Cancel\s+Rename/)
+      const renameInput = renameApp.renderer.root.findDescendantById("opencode-sidebar-sessions:rename-input")
+      expect(renameInput).toBeInstanceOf(InputRenderable)
+      expect((renameInput as InputRenderable).value).toBe("Session 13")
+      expect(update).not.toHaveBeenCalled()
+      ;(renameInput as InputRenderable).value = "Renamed session"
+      ;(renameInput as InputRenderable).submit()
+      await renameApp.waitFor(() => update.mock.calls.length === 1)
+      expect(clearDialog).toHaveBeenCalledTimes(1)
+    } finally {
+      renameApp.renderer.destroy()
+    }
+    expect(update).toHaveBeenCalledWith({
+      sessionID: "session-13",
+      title: "Renamed session",
+    })
+    rename?.run({} as never)
+    const updatedRenameApp = await testRender(() => dialogFactory?.(), { width: 60, height: 8 })
+    try {
+      const updatedInput = updatedRenameApp.renderer.root.findDescendantById("opencode-sidebar-sessions:rename-input")
+      expect((updatedInput as InputRenderable).value).toBe("Renamed session")
+    } finally {
+      updatedRenameApp.renderer.destroy()
+    }
+    update.mockClear()
+
     const archive = navigationLayer?.commands?.find((command) => command.name === "session.sidebar.archive")
     archive?.run({} as never)
-    expect(replaceDialog).toHaveBeenCalledTimes(1)
+    expect(replaceDialog).toHaveBeenCalledTimes(3)
+    dialogFactory?.()
     expect(confirmation?.title).toBe("Archive session")
-    expect(confirmation?.message).toBe('Archive session "Session 13"?')
+    expect(confirmation?.message).toBe('Archive session "Renamed session"?')
     expect(update).not.toHaveBeenCalled()
     await confirmation?.onConfirm?.()
     expect(update).toHaveBeenCalledWith({

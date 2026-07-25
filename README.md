@@ -19,6 +19,7 @@ Restart OpenCode after installation.
 | `<leader>f` | Focus the session list |
 | `up` / `down` | Select a session |
 | `enter` | Open the selected session |
+| `ctrl+r` | Rename the selected session |
 | `a` | Archive after confirmation |
 | `esc` | Return to the prompt |
 
