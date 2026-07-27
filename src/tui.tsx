@@ -222,7 +222,7 @@ function SessionList(props: {
       >
         <box width="100%" flexDirection="row" justifyContent="space-between">
           <text fg={theme().text} wrapMode="none">
-            <b>rename</b> <span style={{ fg: theme().textMuted }}>ctrl+r</span>
+            <b>rename</b> <span style={{ fg: theme().textMuted }}>r</span>
           </text>
           <text fg={theme().text} wrapMode="none">
             <b>archive</b> <span style={{ fg: theme().textMuted }}>a</span>
@@ -375,18 +375,10 @@ const tui: TuiPlugin = async (api) => {
     }
   }
 
-  const confirmArchive = () => {
+  const archiveSelected = () => {
     const session = ordered().find((item) => item.id === selectedSessionID())
     if (!session || session.time.archived !== undefined) return
-    const DialogConfirm = api.ui.DialogConfirm
-    api.ui.dialog.replace(() => (
-      <DialogConfirm
-        title="Archive session"
-        message={`Archive session "${session.title}"?`}
-        onConfirm={() => archive(session)}
-        onCancel={() => {}}
-      />
-    ))
+    void archive(session)
   }
 
   api.event.on("session.created", (event) => upsert(event.properties.info))
@@ -440,7 +432,7 @@ const tui: TuiPlugin = async (api) => {
         title: "Archive selected session",
         category: "Session",
         enabled: () => ordered().find((session) => session.id === selectedSessionID())?.time.archived === undefined,
-        run: confirmArchive,
+        run: archiveSelected,
       },
     ],
     bindings: [
@@ -453,7 +445,7 @@ const tui: TuiPlugin = async (api) => {
         "dialog.select.end",
         "dialog.select.submit",
       ]),
-      { key: "ctrl+r", cmd: "session.sidebar.rename", desc: "Rename selected session" },
+      { key: "r", cmd: "session.sidebar.rename", desc: "Rename selected session" },
       { key: "a", cmd: "session.sidebar.archive", desc: "Archive selected session" },
       { key: "escape", cmd: leaveSidebar, desc: "Leave session sidebar" },
       { key: "ctrl+c", cmd: leaveSidebar, desc: "Leave session sidebar" },

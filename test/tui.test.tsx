@@ -7,12 +7,6 @@ import { Show } from "solid-js"
 import plugin from "../src/tui"
 
 type KeymapLayer = Parameters<TuiPluginApi["keymap"]["registerLayer"]>[0]
-type ConfirmProps = {
-  title: string
-  message: string
-  onConfirm?: () => void | Promise<void>
-  onCancel?: () => void
-}
 const color = RGBA.fromHex("#ffffff")
 const theme = {
   primary: color,
@@ -57,7 +51,6 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
   })
   const toast = mock(() => {})
   const clearDialog = mock(() => {})
-  let confirmation: ConfirmProps | undefined
   let slotOrder: number | undefined
   let renderTitle: (() => JSX.Element) | undefined
   let renderSidebar: (() => JSX.Element) | undefined
@@ -72,10 +65,6 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
     </Show>
   )
   const Slot = () => null
-  const DialogConfirm = (props: ConfirmProps) => {
-    confirmation = props
-    return null
-  }
   const api = {
     theme: { current: theme },
     client: { session: { list: async () => ({ data: sessions }), update } },
@@ -84,7 +73,6 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
     ui: {
       Prompt,
       Slot,
-      DialogConfirm,
       dialog: { replace: replaceDialog, clear: clearDialog, setSize: () => {} },
       toast,
     },
@@ -171,14 +159,14 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
     expect(titleLine).not.toContain("swalker326")
     expect(initial).toContain("move ↑↓")
     expect(initial).toContain("open ↵")
-    expect(initial).toContain("rename ctrl+r")
+    expect(initial).toContain("rename r")
     expect(initial).toContain("archive a")
     expect(initial).toContain("esc")
     const sessionsLine = initial.split("\n").find((line) => line.includes("Sessions"))
     expect(sessionsLine).toContain("move ↑↓")
     expect(sessionsLine).toContain("open ↵")
     expect(initial).toContain("back esc")
-    expect(initial.indexOf("rename ctrl+r")).toBeGreaterThan(initial.indexOf("> Session 13"))
+    expect(initial.indexOf("rename r")).toBeGreaterThan(initial.indexOf("> Session 13"))
     expect(initial).not.toContain("Prompt")
     expect(initial).toContain("Sessions")
     expect(initial).not.toContain("Session 1 ")
@@ -205,7 +193,7 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
 
     expect((navigationLayer?.enabled as () => boolean)()).toBe(true)
     expect(navigationLayer?.bindings).toContainEqual({
-      key: "ctrl+r",
+      key: "r",
       cmd: "session.sidebar.rename",
       desc: "Rename selected session",
     })
@@ -248,12 +236,8 @@ test("focuses and scrolls the session list with OpenCode's selector bindings", a
 
     const archive = navigationLayer?.commands?.find((command) => command.name === "session.sidebar.archive")
     archive?.run({} as never)
-    expect(replaceDialog).toHaveBeenCalledTimes(3)
-    dialogFactory?.()
-    expect(confirmation?.title).toBe("Archive session")
-    expect(confirmation?.message).toBe('Archive session "Renamed session"?')
-    expect(update).not.toHaveBeenCalled()
-    await confirmation?.onConfirm?.()
+    expect(replaceDialog).toHaveBeenCalledTimes(2)
+    await app.waitFor(() => (archive?.enabled as () => boolean)() === false)
     expect(update).toHaveBeenCalledWith({
       sessionID: "session-13",
       time: { archived: expect.any(Number) },
